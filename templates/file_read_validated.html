@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}File Read Validated{% endblock %}
+{% block content %}
+    <h1 class="mt-4">File Read Validated</h1>
+    <form method="POST">
+        <div class="form-group">
+            <label for="file_path">File Path</label>
+            <input type="text" class="form-control" id="file_path" name="file_path" placeholder="File Path" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Read</button>
+    </form>
+    {% if content %}
+        <pre class="mt-4">{{ content }}</pre>
+    {% endif %}
+{% endblock %}

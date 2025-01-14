@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Lägg till produkt{% endblock %}
+{% block content %}
+    <h1 class="mt-4">Lägg till produkt</h1>
+    {% if 'user' not in session or session['user'] != 'admin' %}
+        <div class="alert alert-danger">Du måste vara inloggad som admin för att lägga till produkter.</div>
+    {% else %}
+        <form method="POST" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="name">Namn</label>
+                <input type="text" class="form-control" id="name" name="name" placeholder="Namn" required>
+            </div>
+            <div class="form-group">
+                <label for="price">Pris</label>
+                <input type="text" class="form-control" id="price" name="price" placeholder="Pris" required>
+            </div>
+            <div class="form-group">
+                <label for="description">Beskrivning</label>
+                <textarea class="form-control" id="description" name="description" placeholder="Beskrivning"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="image">Bild</label>
+                <input type="file" class="form-control-file" id="image" name="image">
+            </div>
+            <button type="submit" class="btn btn-primary">Lägg till</button>
+        </form>
+    {% endif %}
+{% endblock %}

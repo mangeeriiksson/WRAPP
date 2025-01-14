@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}Uploads Image{% endblock %}
+{% block content %}
+    <h1 class="mt-4">Uploads Image</h1>
+    <img src="{{ url_for('static', filename=image_path) }}" class="img-fluid" alt="Uploaded Image">
+{% endblock %}

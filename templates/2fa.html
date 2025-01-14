@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}2FA{% endblock %}
+{% block content %}
+    <h1 class="mt-4">2FA</h1>
+    <form method="POST">
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" class="form-control" id="username" name="username" placeholder="Username" required>
+        </div>
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" class="form-control" id="password" name="password" placeholder="Password" required>
+        </div>
+        <div class="form-group">
+            <label for="two_factor_code">2FA Code</label>
+            <input type="text" class="form-control" id="two_factor_code" name="two_factor_code" placeholder="2FA Code" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Login</button>
+    </form>
+{% endblock %}

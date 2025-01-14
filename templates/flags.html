@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Flags{% endblock %}
+{% block content %}
+    <h1 class="mt-4">Flags</h1>
+    <ul class="list-group">
+        {% for flag_id, flag_value in flags.items() %}
+            <li class="list-group-item">{{ flag_id }}: {{ flag_value }}</li>
+        {% endfor %}
+    </ul>
+{% endblock %}

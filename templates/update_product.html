@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Uppdatera Produkt{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Uppdatera Produkt</h1>
+    <form method="POST" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="name">Namn</label>
+            <input type="text" class="form-control" id="name" name="name" value="{{ product[1] }}" required>
+        </div>
+        <div class="form-group">
+            <label for="price">Pris</label>
+            <input type="text" class="form-control" id="price" name="price" value="{{ product[2] }}" required>
+        </div>
+        <div class="form-group">
+            <label for="description">Beskrivning</label>
+            <textarea class="form-control" id="description" name="description">{{ product[3] }}</textarea>
+        </div>
+        <div class="form-group">
+            <label for="image">Bild</label>
+            <input type="file" class="form-control-file" id="image" name="image">
+        </div>
+        <button type="submit" class="btn btn-primary">Uppdatera Produkt</button>
+    </form>
+</div>
+{% endblock %}
