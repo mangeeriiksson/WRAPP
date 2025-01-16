@@ -1,10 +1,35 @@
 {% extends "base.html" %}
-{% block title %}Orders{% endblock %}
+
+{% block title %}Ordrar{% endblock %}
+
 {% block content %}
-    <h1 class="mt-4">Orders</h1>
-    <ul class="list-group">
-        {% for order in orders %}
-            <li class="list-group-item">Order ID: {{ order.id }} - Total: {{ order.total }} - Status: {{ order.status }}</li>
-        {% endfor %}
-    </ul>
+<div class="container mt-4">
+    <h1 class="text-center text-primary mb-4">Ordrar</h1>
+    {% if orders %}
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Order ID</th>
+                    <th>Användare</th>
+                    <th>Produkt</th>
+                    <th>Kvantitet</th>
+                    <th>Tidpunkt</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                    <tr>
+                        <td>{{ order[0] }}</td>
+                        <td>{{ order[1] }}</td>
+                        <td>{{ order[2] }}</td>
+                        <td>{{ order[3] }}</td>
+                        <td>{{ order[4] }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="text-center text-muted">Inga ordrar att visa.</p>
+    {% endif %}
+</div>
 {% endblock %}

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Produkt{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="text-center text-primary mb-4">Produkt</h1>
+    
+    {% if file_content %}
+        <pre class="bg-light p-3 border">{{ file_content }}</pre>
+    {% elif error_message %}
+        <div class="alert alert-danger" role="alert">
+            {{ error_message }}
+        </div>
+    {% else %}
+        <div class="alert alert-info" role="alert">
+            Ingen fil vald.
+        </div>
+    {% endif %}
+
+    {% if 'user' in session and session['user'] == 'admin' %}
+        <a href="{{ url_for('add_product') }}" class="btn btn-primary mb-3">Lägg till produkt</a>
+    {% endif %}
+
+    <form method="GET" action="{{ url_for('vulnerable_file') }}" class="mb-3">
+        <div class="input-group">
+            <input type="text" class="form-control" name="filename" placeholder="Ange filnamn">
+            <button class="btn btn-primary" type="submit">Visa fil</button>
+        </div>
+    </form>
+
+    {% if products %}
+        <table class="table table-striped table-hover table-bordered">
+            <thead class="table-primary">
+                <tr>
+                    <th>ID</th>
+                    <th>Namn</th>
+                    <th>Beskrivning</th>
+                    <th>Pris</th>
+                    {% if 'user' in session and session['user'] == 'admin' %}
+                        <th>Åtgärder</th>
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for product in products %}
+                    <tr>
+                        <td>{{ product[0] }}</td>
+                        <td>{{ product[1] }}</td>
+                        <td>{{ product[3] }}</td>
+                        <td>{{ product[2] }}</td>
+                        {% if 'user' in session and session['user'] == 'admin' %}
+                            <td>
+                                <a href="{{ url_for('update_product', product_id=product[0]) }}" class="btn btn-secondary">Uppdatera</a>
+                                <form method="POST" action="{{ url_for('delete_product', product_id=product[0]) }}" style="display:inline;">
+                                    <button type="submit" class="btn btn-danger" onclick="return confirm('Är du säker på att du vill ta bort denna produkt?');">Ta bort</button>
+                                </form>
+                            </td>
+                        {% endif %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="text-center text-muted">Inga produkter att visa.</p>
+    {% endif %}
+</div>
+{% endblock %}

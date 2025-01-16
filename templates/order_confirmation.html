@@ -4,4 +4,10 @@
     <h1 class="mt-4">Order Confirmation</h1>
     <p>Your order has been placed successfully.</p>
     <a class="btn btn-primary" href="{{ url_for('shop') }}">Continue Shopping</a>
+    <h1>Orderbekräftelse</h1>
+<p>Order-ID: {{ order[0] }}</p>
+<p>Användare: {{ order[1] }}</p>
+<p>Totalt pris: {{ order[2] }}</p>
+<p>Status: {{ order[3] }}</p>
+
 {% endblock %}

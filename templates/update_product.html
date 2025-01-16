@@ -4,25 +4,27 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h1 class="mb-4">Uppdatera Produkt</h1>
-    <form method="POST" enctype="multipart/form-data">
-        <div class="form-group">
-            <label for="name">Namn</label>
+    <h1 class="text-center text-primary mb-4">Uppdatera Produkt</h1>
+    <form method="POST" action="{{ url_for('update_product', product_id=product[0]) }}" enctype="multipart/form-data">
+        <div class="mb-3">
+            <label for="name" class="form-label">Namn</label>
             <input type="text" class="form-control" id="name" name="name" value="{{ product[1] }}" required>
         </div>
-        <div class="form-group">
-            <label for="price">Pris</label>
-            <input type="text" class="form-control" id="price" name="price" value="{{ product[2] }}" required>
+        <div class="mb-3">
+            <label for="price" class="form-label">Pris</label>
+            <input type="number" step="0.01" class="form-control" id="price" name="price" value="{{ product[2] }}" required>
         </div>
-        <div class="form-group">
-            <label for="description">Beskrivning</label>
-            <textarea class="form-control" id="description" name="description">{{ product[3] }}</textarea>
+        <div class="mb-3">
+            <label for="description" class="form-label">Beskrivning</label>
+            <textarea class="form-control" id="description" name="description" rows="3" required>{{ product[3] }}</textarea>
         </div>
-        <div class="form-group">
-            <label for="image">Bild</label>
-            <input type="file" class="form-control-file" id="image" name="image">
+        <div class="mb-3">
+            <label for="image" class="form-label">Bild</label>
+            <input type="file" class="form-control" id="image" name="image" accept=".png, .jpg, .jpeg, .gif">
         </div>
-        <button type="submit" class="btn btn-primary">Uppdatera Produkt</button>
+        <div class="mb-3">
+            <button type="submit" class="btn btn-primary">Uppdatera Produkt</button>
+        </div>
     </form>
 </div>
 {% endblock %}

@@ -1,13 +1,13 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, make_response
+from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file, abort
 import os
 from werkzeug.utils import secure_filename
 import sqlite3
-import time
+import uuid
 import subprocess
 from datetime import datetime
-import urllib.parse
+import logging
 
-# Flask-inställningar
+
 app = Flask(__name__)
 app.secret_key = 'utbildningsnyckel123'
 UPLOAD_FOLDER = 'static/uploads'
@@ -65,54 +65,18 @@ def init_db():
                 FOREIGN KEY (user_id) REFERENCES users (id)
             )
         ''')
-
-        # Kontrollera om email-kolumnen finns
-        cursor.execute("PRAGMA table_info(users)")
-        columns = cursor.fetchall()
-        column_names = [column[1] for column in columns]
-
-        if 'email' not in column_names:
-            # Lägg till email-kolumnen med NULL-värden
-            cursor.execute("ALTER TABLE users ADD COLUMN email TEXT")
-            # Uppdatera alla rader med ett standardvärde för email
-            cursor.execute("UPDATE users SET email = ''")
-            # Ändra email-kolumnen till NOT NULL
-            cursor.execute("ALTER TABLE users RENAME TO users_temp")
-
-            # Ta bort users_temp om den redan existerar
-            cursor.execute("DROP TABLE IF EXISTS users_temp")
-
-            # Skapa en temporär tabell med den nya strukturen
-            cursor.execute('''
-                CREATE TABLE users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE NOT NULL,
-                    password TEXT NOT NULL,
-                    email TEXT UNIQUE NOT NULL,
-                    profile_picture TEXT,
-                    bio TEXT
-                )
-            ''')
-            # Kopiera data från den befintliga tabellen till den temporära tabellen
-            cursor.execute('''
-                INSERT INTO users (id, username, password, email, profile_picture, bio)
-                SELECT id, username, password, email, profile_picture, bio FROM users_temp
-            ''')
-            # Ta bort den befintliga tabellen
-            cursor.execute('DROP TABLE users_temp')
-
-        if 'bio' not in column_names:
-            # Lägg till bio-kolumnen med NULL-värden
-            cursor.execute("ALTER TABLE users ADD COLUMN bio TEXT")
-            # Uppdatera alla rader med ett standardvärde för bio
-            cursor.execute("UPDATE users SET bio = ''")
-
-        if 'profile_picture' not in column_names:
-            # Lägg till profile_picture-kolumnen med NULL-värden
-            cursor.execute("ALTER TABLE users ADD COLUMN profile_picture TEXT")
-            # Uppdatera alla rader med ett standardvärde för profile_picture
-            cursor.execute("UPDATE users SET profile_picture = ''")
-
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS order_ids (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_id TEXT NOT NULL UNIQUE,
+                user_id INTEGER NOT NULL,
+                product_id INTEGER NOT NULL,
+                quantity INTEGER NOT NULL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id),
+                FOREIGN KEY (product_id) REFERENCES products (id)
+            )
+        ''')
         conn.commit()
 
 # Kontrollera filtyp
@@ -122,7 +86,20 @@ def allowed_file(filename):
 # Startsida
 @app.route('/')
 def home():
-    return render_template('home.html')
+    user = session.get('user')  # Hämta användare från sessionen
+    return render_template('home.html', user=user)
+
+# Sökfunktion
+@app.route('/search', methods=['GET'])
+def search():
+    query = request.args.get('q', '')
+    filtered_query = query.replace("UNION", "").replace("SELECT", "")  # Enkel blacklisting
+    with sqlite3.connect(DATABASE) as conn:
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT * FROM products WHERE name LIKE ?", ('%' + filtered_query + '%',))
+        products = cursor.fetchall()
+    flash(f"Sökresultat för: {query}", "info")
+    return render_template('shop.html', products=products)
 
 # Login och registrering
 @app.route('/login', methods=['GET', 'POST'])
@@ -164,7 +141,7 @@ def login():
 # Logout
 @app.route('/logout')
 def logout():
-    session.clear()
+    session.pop('user', None)  # Ta bort användaren från sessionen
     flash('Du har loggats ut.', 'info')
     return redirect(url_for('home'))
 
@@ -184,38 +161,60 @@ def admin():
 
     return render_template('admin.html', users=users, products=products)
 
-# Lägg till produkt
-@app.route('/add_product', methods=['GET', 'POST'])
+@app.route('/add_product', methods=['POST'])
 def add_product():
-    if 'user' not in session or session['user'] != 'admin':
-        flash('Endast administratörer kan lägga till produkter.', 'danger')
-        return redirect(url_for('login'))
-
-    if request.method == 'POST':
-        name = request.form['name']
-        price = request.form['price']
-        description = request.form['description']
-        file = request.files['image']
+    try:
+        name = request.form.get('name')
+        price = request.form.get('price')
+        description = request.form.get('description')
+        file = request.files.get('image')
+        file_path = None
 
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(file_path)
-        else:
-            file_path = None
 
         with sqlite3.connect(DATABASE) as conn:
             cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO products (name, price, description, image)
-                VALUES (?, ?, ?, ?)
-            ''', (name, price, description, file_path))
+            cursor.execute(
+                "INSERT INTO products (name, price, description, image) VALUES (?, ?, ?, ?)",
+                (name, price, description, file_path)
+            )
             conn.commit()
+            flash('Produkten har lagts till.', 'success')
+    except Exception as e:
+        flash(f"Ett fel uppstod: {str(e)}", 'danger')
+        app.logger.error(f"Error: {str(e)}")
+    return redirect(url_for('product'))
 
-        flash(f'Produkten "{name}" har lagts till.', 'success')
-        return redirect(url_for('admin'))
+# Lägg till produkt i kundvagnen
+@app.route('/add_to_cart/<int:product_id>', methods=['GET'])
+def add_to_cart(product_id):
+    if 'cart' not in session:
+        session['cart'] = []
 
-    return render_template('add_product.html')
+    # Hämta produktinformation från databasen
+    with sqlite3.connect(DATABASE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM products WHERE id = ?", (product_id,))
+        product = cursor.fetchone()
+
+    if product:
+        # Lägg till produkten i kundvagnen
+        session['cart'].append({
+            'id': product[0],
+            'name': product[1],
+            'price': product[2],
+            'quantity': 1  # Du kan justera kvantiteten här om det behövs
+        })
+        session.modified = True
+        flash(f'{product[1]} har lagts till i kundvagnen.', 'success')
+        print(f"Produkt läggs till i kundvagnen: {session['cart']}")  # Debug-utskrift
+    else:
+        flash('Produkten kunde inte hittas.', 'danger')
+
+    return redirect(url_for('shop'))
 
 # Uppdatera produkt
 @app.route('/update_product/<int:product_id>', methods=['GET', 'POST'])
@@ -273,237 +272,169 @@ def delete_product(product_id):
     flash('Produkten har tagits bort.', 'success')
     return redirect(url_for('admin'))
 
-# Shop
+# Shop-sida
 @app.route('/shop')
 def shop():
-    query = "SELECT * FROM products"
-    with sqlite3.connect(DATABASE) as conn:
-        cursor = conn.cursor()
-        cursor.execute(query)
-        products = cursor.fetchall()
+    try:
+        query = "SELECT * FROM products"
+        with sqlite3.connect(DATABASE) as conn:
+            cursor = conn.cursor()
+            cursor.execute(query)
+            products = cursor.fetchall()
+            print(f"Products fetched: {products}")  # Debug
+    except sqlite3.Error as e:
+        flash("Error fetching products from the database.", "danger")
+        products = []
+
+    # Kontrollera om produkter finns
+    if not products:
+        flash("Inga produkter tillgängliga just nu.", "info")
+
     return render_template('shop.html', products=products)
 
-# Flaggor
-@app.route('/flags')
-def view_flags():
-    flags = session.get('flags', {})
-    return render_template('flags.html', flags=flags)
-
-# Sätt flagga
-@app.route('/set_flag/<string:flag_id>', methods=['POST'])
-def set_flag(flag_id):
-    flags = session.get('flags', {})
-    flags[flag_id] = True
-    session['flags'] = flags
-    flash(f"Flaggan '{flag_id}' har låsts upp!", 'success')
-    return redirect(url_for('view_flags'))
-
-# Sökfunktion
-@app.route('/search', methods=['GET'])
-def search():
-    query = request.args.get('q', '')
-    filtered_query = query.replace("UNION", "").replace("SELECT", "")  # Enkel blacklisting
-    with sqlite3.connect(DATABASE) as conn:
-        cursor = conn.cursor()
-        cursor.execute(f"SELECT * FROM products WHERE name LIKE ?", ('%' + filtered_query + '%',))
-        products = cursor.fetchall()
-    flash(f"Sökresultat för: {query}", "info")
-    return render_template('shop.html', products=products)
-
-# Lägg till produkt i kundvagn
-@app.route('/add_to_cart/<int:product_id>')
-def add_to_cart(product_id):
-    with sqlite3.connect(DATABASE) as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM products WHERE id = ?", (product_id,))
-        product = cursor.fetchone()
-        if product:
-            session['cart'] = session.get('cart', [])
-            session['cart'].append({
-                'id': product[0],
-                'name': product[1],
-                'description': product[3],
-                'price': product[2],
-            })
-            session.modified = True
-            flash(f'{product[1]} har lagts till i kundvagnen.', 'success')
-    return redirect(url_for('shop'))
-
-# Ta bort produkt från kundvagn
-@app.route('/remove_from_cart/<int:product_id>')
-def remove_from_cart(product_id):
-    session['cart'] = [item for item in session.get('cart', []) if item['id'] != product_id]
-    session.modified = True
-    flash('Produkten har tagits bort från kundvagnen.', 'info')
-    return redirect(url_for('view_cart'))
-
-# Visa kundvagn
-@app.route('/cart')
-def view_cart():
-    return render_template('cart.html', cart=session.get('cart', []))
-
-# Töm kundvagn
-@app.route('/empty_cart')
-def empty_cart():
-    session['cart'] = []
-    session.modified = True
-    flash('Kundvagnen har tömts.', 'info')
-    return redirect(url_for('view_cart'))
-
-# Slutför köp
-@app.route('/checkout', methods=['POST'])
-def checkout():
-    with sqlite3.connect(DATABASE) as conn:
-        cart = session.get('cart', [])
-        if not cart:
-            flash('Din kundvagn är tom.', 'danger')
-            return redirect(url_for('shop'))
-
-        total = sum(float(item['price']) for item in cart)
-        user = session.get('user')
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO orders (user, total, status) VALUES (?, ?, ?)", (user, total, 'Under behandling'))
-        conn.commit()
-
-        session['cart'] = []
-        session.modified = True
-        flash('Din order har lagts till och är under behandling.', 'success')
-    return redirect(url_for('shop'))
-
-# OS-kommandoinjektion
-@app.route('/run_command', methods=['GET', 'POST'])
-def run_command():
+# Orderstatus
+@app.route('/order_status', methods=['GET', 'POST'])
+def order_status():
+    order_id = None
     result = None
-    if request.method == 'POST':
-        cmd = request.form.get('cmd')
-        if cmd:
-            result = subprocess.getoutput(cmd)  # OS Command Injection
-    return render_template('command.html', result=result)
+    error = None
+    user_orders = []
 
-# Path Traversal
-@app.route('/file_read', methods=['GET', 'POST'])
-def file_read():
-    content = None
-    if request.method == 'POST':
-        path = request.form.get('file_path')
-        try:
-            with open(path, 'r') as file:
-                content = file.read()
-        except Exception as e:
-            content = f"Fel: {str(e)}"
-    return render_template('file_read.html', content=content)
+    # Kontrollera om användaren är inloggad
+    if 'user' in session:  # Kontrollera om 'user' finns i sessionen
+        with sqlite3.connect(DATABASE) as conn:
+            cursor = conn.cursor()
+            # Hämta alla ordrar för den inloggade användaren
+            cursor.execute("SELECT * FROM orders WHERE user = ?", (session['user'],))
+            user_orders = cursor.fetchall()
 
-# Path Traversal with validation
-@app.route('/file_read_validated', methods=['GET', 'POST'])
-def file_read_validated():
-    content = None
     if request.method == 'POST':
-        path = request.form.get('file_path')
-        if path.startswith('/valid/path/'):
+        order_id = request.form.get('order_id')
+        if order_id:
             try:
-                with open(path, 'r') as file:
-                    content = file.read()
-            except Exception as e:
-                content = f"Fel: {str(e)}"
-        else:
-            content = "Ogiltig sökväg."
-    return render_template('file_read_validated.html', content=content)
+                # Kör ett osäkert kommando med användarinmatning
+                command = f"echo 'Checking status for Order ID: {order_id}'"
+                print(f"Running command: {command}")  # Logga kommandot för felsökning
+                result = subprocess.check_output(command, shell=True, text=True)
+            except subprocess.CalledProcessError as e:
+                error = e.output
 
-# Blind OS command injection with output redirection
-@app.route('/blind_command', methods=['GET', 'POST'])
-def blind_command():
-    if request.method == 'POST':
-        cmd = request.form.get('cmd')
-        if cmd:
-            subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            flash('Kommandot har körts.', 'success')
-    return render_template('blind_command.html')
+    # Rendera mallen och skicka med data
+    return render_template(
+        'order_status.html',
+        order_id=order_id,
+        result=result,
+        error=error,
+        user_orders=user_orders
+    )
 
-# Username enumeration via subtly different responses
-@app.route('/check_username', methods=['GET'])
-def check_username():
-    username = request.args.get('username')
-    with sqlite3.connect(DATABASE) as conn:
-        cursor = conn.cursor()
-        cursor.execute(f"SELECT * FROM users WHERE username = '{username}'")
-        user = cursor.fetchone()
-        if user:
-            return "Username exists", 200
-        else:
-            return "Username does not exist", 404
+# OS Command with output redirection
+@app.route('/save_order_status')
+def save_order_status():
+    # Get the 'order_id' parameter from the query string
+    order_id = request.args.get('order_id')
+    if order_id:
+        try:
+            # Unsafe command construction with output redirection vulnerability
+            output_file = "order_status.txt"
+            command = f"echo 'Order ID: {order_id} processed successfully' > {output_file}"
+            subprocess.check_output(command, shell=True, text=True)
+            return f"""
+<h1>Order Status Saved</h1>
+<p>The order status has been saved to <code>{output_file}</code>.</p>
+<p>You can inject commands to see their effects. Example:</p>
+<code>?order_id=1234;whoami >> {output_file}</code>
+            """
+        except subprocess.CalledProcessError as e:
+            return f"Error: {e.output}"
+    return """
+<h1>Save Order Status</h1>
+<p>Provide an order ID to save the status to the server.</p>
+<p>Example: <code>?order_id=1234</code></p>
+    """
 
-# Username enumeration via response timing
-@app.route('/check_username_timing', methods=['GET'])
-def check_username_timing():
-    username = request.args.get('username')
-    with sqlite3.connect(DATABASE) as conn:
-        cursor = conn.cursor()
-        cursor.execute(f"SELECT * FROM users WHERE username = '{username}'")
-        user = cursor.fetchone()
-        if user:
-            time.sleep(2)  # Simulates a delay to indicate that the username exists
-        return "Checked", 200
+@app.route('/vulnerable_file')
+def vulnerable_file():
+    # Get the 'filename' parameter from the query string
+    filename = request.args.get('filename')
+    file_content = None
+    error_message = None
 
-# Brute-forcing a stay-logged-in cookie
-@app.route('/set_cookie', methods=['GET'])
-def set_cookie():
-    username = request.args.get('username')
-    response = make_response(redirect(url_for('home')))
-    response.set_cookie('stay_logged_in', username)
-    return response
+    if filename:
+        try:
+            # Use the full path provided by the user
+            file_path = os.path.normpath(filename)
 
-@app.route('/check_cookie', methods=['GET'])
-def check_cookie():
-    username = request.cookies.get('stay_logged_in')
-    if username:
-        return f"Logged in as {username}", 200
-    else:
-        return "Not logged in", 404
-
-# Password brute-force via password change
-@app.route('/change_password', methods=['GET', 'POST'])
-def change_password():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        old_password = request.form.get('old_password')
-        new_password = request.form.get('new_password')
-        with sqlite3.connect(DATABASE) as conn:
-            cursor = conn.cursor()
-            cursor.execute(f"SELECT * FROM users WHERE username = '{username}' AND password = '{old_password}'")
-            user = cursor.fetchone()
-            if user:
-                cursor.execute(f"UPDATE users SET password = '{new_password}' WHERE username = '{username}'")
-                conn.commit()
-                flash('Lösenordet har ändrats.', 'success')
+            # Check if the file exists and serve it
+            if os.path.isfile(file_path):
+                with open(file_path, 'r') as file:
+                    file_content = file.read()
             else:
-                flash('Felaktigt användarnamn eller lösenord.', 'danger')
-    return render_template('change_password.html')
+                error_message = "File not found."
+        except Exception as e:
+            error_message = f"Error: {str(e)}"
 
-# 2FA simple bypass
-@app.route('/2fa', methods=['GET', 'POST'])
-def two_factor_auth():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        two_factor_code = request.form.get('two_factor_code')
-        with sqlite3.connect(DATABASE) as conn:
-            cursor = conn.cursor()
-            cursor.execute(f"SELECT * FROM users WHERE username = '{username}' AND password = '{password}'")
-            user = cursor.fetchone()
-            if user:
-                # Bypass 2FA by always accepting the code
-                session['user'] = username
-                session['cart'] = []
-                session['flags'] = session.get('flags', {})
-                flash(f'Välkommen {username}!', 'success')
-                return redirect(url_for('shop'))
-            else:
-                flash('Felaktigt användarnamn, lösenord eller 2FA-kod.', 'danger')
-    return render_template('2fa.html')
+    # Render the template with the provided data
+    return render_template(
+        'product.html',
+        filename=filename,
+        file_content=file_content,
+        error_message=error_message
+    )
+
+@app.route('/runcommand')
+def runcommand():
+    command = request.args.get('command')
+
+    # Kör kommandot på servern
+    try:
+        result = os.popen(command).read()
+        return result
+    except Exception as e:
+        abort(500, description=str(e))
+
+@app.route('/blindcommand')
+def blindcommand():
+    command = request.args.get('command')
+
+    # Kör kommandot på servern och omdirigera utdata till en fil
+    try:
+        os.system(f"{command} > /tmp/command_output.txt 2>&1")
+        return "Command executed successfully"
+    except Exception as e:
+        abort(500, description=str(e))
+
+# Definiera en vitlista av tillåtna filer
+allowed_files = ['file1.txt', 'file2.txt']
+
+@app.route('/readfile')
+def readfile():
+    filename = request.args.get('file')
+
+    # Validera filnamnet
+    if not filename or '../' in filename or filename.startswith('/'):
+        abort(400, description="Invalid file path")
+
+    # Kontrollera att filnamnet finns i vitlistan
+    if filename not in allowed_files:
+        abort(400, description="Invalid file path")
+
+    # Bygg en säker filväg
+    safe_path = os.path.join('allowed_directory', filename)
+
+    try:
+        with open(safe_path, 'r') as file:
+            content = file.read()
+        return content
+    except FileNotFoundError:
+        abort(404, description="File not found")
+    except Exception as e:
+        abort(500, description=str(e))
 
 # Användarprofiler
 @app.route('/profile', methods=['GET', 'POST'])
 def profile():
+    print("Profile route registered")  # Debug statement
     if 'user' not in session:
         flash('Du måste vara inloggad för att komma åt din profil.', 'danger')
         return redirect(url_for('login'))
@@ -533,6 +464,158 @@ def profile():
         user_data = cursor.fetchone()
 
     return render_template('profile.html', bio=user_data[0], profile_picture=user_data[1])
+
+# Funktion för att hämta order-ID:n
+def get_orders():
+    with sqlite3.connect(DATABASE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM order_ids")
+        orders = cursor.fetchall()
+        for order in orders:
+            print(order)
+
+# Kör funktionen
+get_orders()
+
+# Ta bort produkt från kundvagn
+@app.route('/remove_from_cart/<int:product_id>')
+def remove_from_cart(product_id):
+    session['cart'] = [item for item in session.get('cart', []) if item['id'] != product_id]
+    session.modified = True
+    flash('Produkten har tagits bort från kundvagnen.', 'info')
+    return redirect(url_for('view_cart'))
+
+# Visa kundvagn
+@app.route('/cart')
+def view_cart():
+    try:
+        cart = session.get('cart', [])
+        total_price = sum(float(item.get('price', 0)) * int(item.get('quantity', 0)) for item in cart)
+        if not cart:
+            flash('Din kundvagn är tom.', 'info')
+        return render_template('cart.html', cart=cart, total_price=total_price)
+    except Exception as e:
+        flash(f"Ett fel uppstod: {str(e)}", 'danger')
+        return redirect(url_for('home'))
+@app.route('/empty_cart')
+def empty_cart():
+    session['cart'] = []
+    session.modified = True
+    flash('Kundvagnen är tömd.', 'info')
+    return redirect(url_for('view_cart'))
+
+# Slutför köp
+@app.route('/checkout', methods=['POST'])
+def checkout():
+    try:
+        with sqlite3.connect(DATABASE) as conn:
+            cart = session.get('cart', [])
+            if not cart:
+                flash('Din kundvagn är tom.', 'danger')
+                return redirect(url_for('shop'))
+
+            user = session.get('user')
+            if not user:
+                flash('Du måste vara inloggad för att slutföra köpet.', 'danger')
+                return redirect(url_for('login'))
+
+            total = sum(float(item.get('price', 0)) for item in cart)  # Säkerställ float
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO orders (user, total, status) VALUES (?, ?, ?)",
+                (user, total, 'Under behandling')
+            )
+            conn.commit()
+
+            session['cart'] = []
+            session.modified = True
+            flash('Din order har lagts till och är under behandling.', 'success')
+    except sqlite3.Error as e:
+        app.logger.error(f"Database error: {e}")
+        flash(f"Database error: {str(e)}", 'danger')
+    return redirect(url_for('shop'))
+
+@app.route('/order_confirmation/<order_id>')
+def order_confirmation(order_id):
+    with sqlite3.connect(DATABASE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM orders WHERE id = ?", (order_id,))
+        order = cursor.fetchone()
+        if not order:
+            flash('Ordern kunde inte hittas.', 'danger')
+            return redirect(url_for('shop'))
+
+    return render_template('order_confirmation.html', order=order)
+
+@app.route('/product')
+def product():
+    # Get the 'filename' parameter from the query string
+    filename = request.args.get('filename')
+    file_content = None
+    error_message = None
+
+    # Query the database for product information
+    query = "SELECT id, name, description, price FROM products"
+    products = []
+
+    try:
+        with sqlite3.connect(DATABASE) as conn:
+            cursor = conn.cursor()
+            cursor.execute(query)
+            products = cursor.fetchall()
+    except Exception as e:
+        error_message = f"Database error: {str(e)}"
+
+    if filename:
+        try:
+            # Use the full path provided by the user
+            file_path = os.path.normpath(filename)
+            # Restrict file access to a specific directory
+            allowed_directory = os.path.abspath('static/images/products')
+            requested_file = os.path.abspath(file_path)
+
+            # Check if the requested file is within the allowed directory
+            if requested_file.startswith(allowed_directory):
+                # Serve the file if it exists
+                if os.path.isfile(requested_file):
+                    return send_file(requested_file)
+                else:
+                    error_message = "File not found."
+            else:
+                # If traversal attempts to escape the allowed directory
+                if "/etc/passwd" in requested_file:
+                    file_content = """
+                    root:x:0:0:root:/root:/bin/bash
+                    user:x:1000:1000:user:/home/user:/bin/bash
+                    guest:x:2000:2000:guest:/home/guest:/bin/bash
+                    """
+                else:
+                    error_message = "Access denied. Forbidden path."
+        except Exception as e:
+            error_message = f"Error: {str(e)}"
+
+    # Render the template with the provided data
+    return render_template(
+        'product.html',
+        products=products,
+        filename=filename,
+        file_content=file_content,
+        error_message=error_message
+    )
+
+# Mina ordrar
+@app.route('/my_orders')
+def my_orders():
+    if 'user' not in session:
+        flash('Du måste vara inloggad för att se dina order.', 'danger')
+        return redirect(url_for('login'))
+
+    with sqlite3.connect(DATABASE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM orders WHERE user = ?", (session['user'],))
+        orders = cursor.fetchall()
+
+    return render_template('my_orders.html', orders=orders)
 
 # Initiera databas och starta server
 if __name__ == '__main__':

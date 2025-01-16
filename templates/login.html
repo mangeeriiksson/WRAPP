@@ -3,53 +3,22 @@
 {% block title %}Logga in{% endblock %}
 
 {% block content %}
-<div class="container mt-5">
-    <div class="row justify-content-center">
-        <!-- Logga in Sektion -->
-        <div class="col-md-5">
-            <div class="card shadow-lg">
-                <div class="card-body">
-                    <h1 class="card-title text-center text-primary">Logga in</h1>
-                    <form method="POST" class="mt-4">
-                        <div class="mb-3">
-                            <label for="username" class="form-label">Användarnamn</label>
-                            <input type="text" class="form-control" id="username" name="username" placeholder="Användarnamn" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="password" class="form-label">Lösenord</label>
-                            <input type="password" class="form-control" id="password" name="password" placeholder="Lösenord" required>
-                        </div>
-                        <input type="hidden" name="action" value="login">
-                        <button type="submit" class="btn btn-primary w-100">Logga in</button>
-                    </form>
-                </div>
-            </div>
+<div class="container mt-4">
+    <h1 class="text-center text-primary mb-4">Logga in</h1>
+    <form method="POST" action="{{ url_for('login') }}">
+        <div class="mb-3">
+            <label for="username" class="form-label">Användarnamn</label>
+            <input type="text" class="form-control" id="username" name="username" required>
         </div>
-
-        <!-- Registrera Sektion -->
-        <div class="col-md-5 mt-4 mt-md-0">
-            <div class="card shadow-lg">
-                <div class="card-body">
-                    <h1 class="card-title text-center text-success">Registrera</h1>
-                    <form method="POST" class="mt-4">
-                        <div class="mb-3">
-                            <label for="reg-username" class="form-label">Användarnamn</label>
-                            <input type="text" class="form-control" id="reg-username" name="username" placeholder="Användarnamn" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="email" class="form-label">E-post</label>
-                            <input type="email" class="form-control" id="email" name="email" placeholder="E-post" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="reg-password" class="form-label">Lösenord</label>
-                            <input type="password" class="form-control" id="reg-password" name="password" placeholder="Välj ett lösenord" required>
-                        </div>
-                        <input type="hidden" name="action" value="register">
-                        <button type="submit" class="btn btn-success w-100">Registrera</button>
-                    </form>
-                </div>
-            </div>
+        <div class="mb-3">
+            <label for="password" class="form-label">Lösenord</label>
+            <input type="password" class="form-control" id="password" name="password" required>
         </div>
-    </div>
+        
+        <div class="mb-3">
+            <button type="submit" class="btn btn-primary" name="action" value="login">Logga in</button>
+            <button type="submit" class="btn btn-secondary" name="action" value="register">Registrera</button>
+        </div>
+    </form>
 </div>
 {% endblock %}

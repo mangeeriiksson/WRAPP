@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Kassa{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="text-center text-primary mb-4">Kassa</h1>
+    {% if session.cart %}
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Produkt</th>
+                    <th>Pris</th>
+                    <th>Kvantitet</th>
+                    <th>Totalt</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in session.cart %}
+                    <tr>
+                        <td>{{ item['name'] }}</td>
+                        <td>{{ item['price'] }}</td>
+                        <td>{{ item['quantity'] }}</td>
+                        <td>{{ item['price'] * item['quantity'] }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="text-right">
+            <h4>Totalt: {{ total_price }}</h4>
+            <form method="POST" action="{{ url_for('checkout') }}">
+                <button type="submit" class="btn btn-primary">Slutför köp</button>
+            </form>
+        </div>
+    {% else %}
+        <p class="text-center text-muted">Din kundvagn är tom.</p>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Sårbar fil{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="text-center text-primary mb-4">Sårbar fil</h1>
+    {% if file_content %}
+        <pre>{{ file_content }}</pre>
+    {% elif error_message %}
+        <div class="alert alert-danger" role="alert">
+            {{ error_message }}
+        </div>
+    {% else %}
+        <div class="alert alert-info" role="alert">
+            Ingen fil vald.
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

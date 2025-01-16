@@ -8,28 +8,32 @@
     <div class="row">
         {% for product in products %}
             <div class="col-md-4 mb-4">
-                <div class="card h-100 shadow-sm">
-                    {% if product[4] %}
-                        <img src="{{ url_for('static', filename=product[4]) }}" class="card-img-top" alt="{{ product[1] }}">
-                    {% else %}
-                        <img src="https://via.placeholder.com/150" class="card-img-top" alt="Placeholder">
-                    {% endif %}
+                <div class="card">
                     <div class="card-body">
-                        <h5 class="card-title text-secondary">{{ product[1] }}</h5>
-                        <p class="card-text text-muted">{{ product[3] }}</p>
-                        <p class="card-text text-dark"><strong>Pris:</strong> {{ product[2] }} SEK</p>
-                        <a href="{{ url_for('add_to_cart', product_id=product[0]) }}" class="btn btn-primary w-100">
-                            <i class="bi bi-cart-plus"></i> Lägg till i kundvagn
+                        <h5 class="card-title">{{ product[1] }}</h5>
+                        <p class="card-text">Pris: {{ product[2] }} SEK</p>
+                        <p class="card-text">{{ product[3] }}</p>
+                        <a href="{{ url_for('add_to_cart', product_id=product[0]) }}" class="btn btn-primary">
+                            Lägg till i kundvagn
                         </a>
                     </div>
                 </div>
             </div>
         {% endfor %}
     </div>
+
     <div class="text-center mt-4">
         <a class="btn btn-secondary btn-lg shadow-sm" href="{{ url_for('view_cart') }}">
             <i class="bi bi-cart"></i> Visa kundvagn
         </a>
     </div>
+
+    {% if 'user' in session and session['user'] == 'admin' %}
+        <div class="text-center mt-5">
+            <a href="{{ url_for('add_product') }}" class="btn btn-success btn-lg shadow-sm">
+                <i class="bi bi-plus-circle"></i> Lägg till ny produkt
+            </a>
+        </div>
+    {% endif %}
 </div>
 {% endblock %}
